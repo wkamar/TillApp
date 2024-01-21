@@ -1,0 +1,70 @@
+﻿@page "/orderlist"
+@using TillApp.Shared.Models
+@inject HttpClient Http
+
+<h3>Order List</h3>
+
+@if (orders != null)
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Order Name</th>
+                <th>Amount</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var order in orders)
+            {
+                <tr>
+                    <td>@order.OrderName</td>
+                    <td>@order.Amount</td>
+                    <td>
+                        <button class="btn btn-primary" @onclick="() => MarkAsPaid(order.OrderID)">Paid</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else
+{
+    <p>Loading...</p>
+}
+
+@code {
+    private List<Order> orders;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var response = await Http.GetAsync("http://localhost:5019/api/orders/notpaid");
+        if (response.IsSuccessStatusCode)
+        {
+            orders = await response.Content.ReadFromJsonAsync<List<Order>>();
+            
+        }
+        else
+        {
+            // Handle error case
+        }
+
+        // Log the response
+        Console.WriteLine($"Response Status Code: {response.StatusCode}");
+        Console.WriteLine($"Response Content: {await response.Content.ReadAsStringAsync()}");
+    }
+    private async Task MarkAsPaid(int orderID)
+    {
+        var response = await Http.PutAsync($"http://localhost:5019/api/orders/{orderID}/markaspaid", null);
+        if (response.IsSuccessStatusCode)
+        {
+            // Update the order status locally
+            var order = orders.FirstOrDefault(o => o.OrderID == orderID);
+            if (order != null)
+            {
+                order.IsPaid = true;
+                orders.RemoveAll(o => o.OrderID == orderID);
+            }
+        }
+    }
+}

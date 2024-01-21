@@ -1,0 +1,194 @@
+﻿@page "/neworder"
+@using System.Text.Json
+@using System.Text
+@using TillApp.Shared.Models
+@using System.Text.Json.Serialization;
+@inject HttpClient httpClient
+
+<h3>New Order</h3>
+
+<div>
+    <label for="orderName">Order Name:</label>
+    <input id="orderName" @bind="@orderName" />
+</div>
+
+<style>
+    .product-container {
+        display: flex;
+        flex-wrap: wrap; /* Allow flex items to wrap to the next line */
+        gap: 10px; /* Add gap between buttons */
+    }
+
+    .product-button {
+        width: 150px; /* Set the desired width for the buttons */
+        height: 100px; /* Set the desired height for the buttons */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        margin: 5px; /* Add margin between buttons */
+    }
+
+    .product-name {
+        text-transform: uppercase;
+        font-weight: bold;
+    }
+
+    .product-price {
+        margin-top: 5px; /* Add margin between product name and price */
+    }
+
+    .order-details {
+        margin-top: 20px;
+    }
+
+    .added-items {
+        font-weight: bold;
+    }
+    /* Added styles for order total and place order button */
+    .order-total-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 20px;
+    }
+
+    .order-total {
+        font-size: 24px; /* Set the desired font size for order total */
+        font-weight: bold;
+    }
+
+    .place-order-button {
+        width: 150px; /* Set the desired width for the button */
+        height: 150px; /* Set the desired height for the button to make it square */
+        font-size: 18px; /* Set the desired font size for the button */
+        background-color: #4caf50; /* Set the background color for the button */
+        color: white; /* Set the text color for the button */
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+</style>
+
+<div>
+    <h4>Items</h4>
+    <div class="product-container">
+        @if (products != null)
+        {
+            @foreach (var product in products)
+            {
+                <button class="product-button" @onclick="() => AddProduct(product)">
+                    <div class="product-name">@product.Name</div>
+                    <div class="product-price">@product.Price</div>
+                </button>
+            }
+        }
+        else
+        {
+            <p>Loading Items...</p>
+        }
+    </div>
+</div>
+
+@if (orderItems != null)
+{
+    <div class="order-details">
+        <h4>Order Items:</h4>
+        <ul class="added-items">
+            @foreach (var item in orderItems)
+            {
+                <li>@item.ItemName - @item.Price</li>
+            }
+        </ul>
+    </div>
+}
+<div class="order-total-container">
+    <h4 class="order-total">Order Total: @orderTotal</h4>
+    <button class="place-order-button" @onclick="PlaceOrder">Place Order</button>
+</div>
+
+@code {
+    private string orderName;
+    private Order newOrder;
+    private List<Product> products;
+    private List<OrderItem> orderItems;
+    private decimal orderTotal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        orderName = "New Order";
+        orderTotal = 0.00m;
+        products = await httpClient.GetFromJsonAsync<List<Product>>("http://localhost:5019/api/products") ?? new List<Product>();
+        orderItems = new List<OrderItem>();
+        this.newOrder = new Order();
+    }
+
+    private void AddProduct(Product product)
+    {
+        var item = new OrderItem();
+        item.ItemName = product.Name;
+        item.Price = product.Price;
+        item.Order = newOrder;
+
+        orderItems.Add(item);
+
+        orderTotal += product.Price;
+
+        Console.WriteLine($"{item.ItemName} Added");
+        Console.WriteLine($"Total : {orderTotal}");
+    }
+
+    private async Task PlaceOrder()
+    {
+        try
+        {
+            this.newOrder.OrderName = orderName;
+            this.newOrder.Amount = orderTotal;
+            this.newOrder.IsPaid = false;
+            this.newOrder.OrderItems = orderItems;
+
+            // var options = new JsonSerializerOptions
+            //     {
+            //         ReferenceHandler = ReferenceHandler.Preserve
+            //     };
+
+            // var json = System.Text.Json.JsonSerializer.Serialize(newOrder, options);
+
+            var settings = new Newtonsoft.Json.JsonSerializerSettings
+                {
+                    ReferenceLoopHandling = Newtonsoft.Json.ReferenceLoopHandling.Ignore
+                };
+
+            string json = Newtonsoft.Json.JsonConvert.SerializeObject(newOrder, settings);
+            Console.WriteLine(json);
+            // Post the order to the API
+            var response = await httpClient.PostAsync("http://localhost:5019/api/orders", new StringContent(json, Encoding.UTF8, "application/json"));
+
+            if (response.IsSuccessStatusCode)
+            {
+                // Reset order and orderItems on success
+                this.newOrder = new Order(); 
+                this.orderItems = new List<OrderItem>();
+                this.orderTotal = 0.0m;
+                this.orderName = "New Order";
+
+                // Display a success message if needed
+                Console.WriteLine("Order placed successfully!");
+            }
+            else
+            {
+                // Handle non-success status codes
+                var errorMessage = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Error placing order: {response.StatusCode}, {errorMessage}");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Handle generic exceptions
+            Console.WriteLine($"Exception placing order: {ex.Message}");
+
+        }
+    }
+}
